@@ -20,8 +20,10 @@ GeoLiftPower.search(
   normalize = FALSE,
   model = "none",
   fixed_effects = TRUE,
+  stat_func = NULL,
   dtw = 0,
-  ProgressBar = FALSE
+  ProgressBar = FALSE,
+  run_stochastic_process = FALSE
 )
 }
 \arguments{
@@ -80,11 +82,21 @@ fit and reduce L2 imbalance metrics.
 \item{fixed_effects}{A logic flag indicating whether to include unit fixed
 effects in the model. Set to TRUE by default.}
 
+\item{stat_func}{Function to compute test statistic. NULL by default.}
+
 \item{dtw}{Emphasis on Dynamic Time Warping (DTW), dtw = 1 focuses exclusively
 on this metric while dtw = 0 (default) relies on correlations only.}
 
 \item{ProgressBar}{A logic flag indicating whether to display a progress bar
 to track progress. Set to FALSE by default.}
+
+\item{run_stochastic_process}{A logic flag indicating whether to select test
+markets through random sampling of the the similarity matrix. Given that
+interpolation biases may be relevant if the synthetic control matches
+the characteristics of the test unit by averaging away large discrepancies
+between the characteristics of the test and the units in the synthetic controls,
+it is recommended to only use random sampling after making sure all units are
+similar. This parameter is set by default to FALSE.}
 }
 \value{
 Data frame with the ordered list of best locations and their

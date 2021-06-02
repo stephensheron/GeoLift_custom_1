@@ -439,8 +439,9 @@ fn_treatment <- function(df,
 #' default is FALSE.
 #' @param fixed_effects A logic flag indicating whether to include unit fixed
 #' effects in the model. Set to FALSE by default.
+#' @param stat_func Function to compute test statistic. NULL by default.
 #' @param model A string indicating the outcome model used in the Augmented Synthetic
-#' Control Method. Set to Generalized Synthetic Controls "GSYN" by default.
+#' Control Method. Set to Generalized Synthetic Controls "none" by default.
 #'
 #' @return
 #' List that contains:
@@ -466,7 +467,8 @@ pvalueCalc <- function(data,
                        type = "pValue",
                        normalize = FALSE,
                        fixed_effects = FALSE,
-                       model = "GSYN") {
+                       stat_func = stat_func,
+                       model = "none") {
 
   treatment_start_time <- max_time - tp - sim + 2
   treatment_end_time <- treatment_start_time + tp - 1
@@ -526,7 +528,8 @@ pvalueCalc <- function(data,
                                             post_length = ncol(wide_data$y),
                                             type = "iid",
                                             q = 1,
-                                            ns = 1000)
+                                            ns = 1000,
+                                            stat_func = stat_func)
     ScaledL2Imbalance <-  PowerCalc$scaled_l2_imbalance
   }
   else if (type == "Imbalance") {
@@ -606,6 +609,7 @@ pvalueCalc <- function(data,
 #'          }
 #' @param fixed_effects A logic flag indicating whether to include unit fixed
 #' effects in the model. Set to TRUE by default.
+#' @param stat_func Function to compute test statistic. NULL by default.
 #' @param ProgressBar A logic flag indicating whether to display a progress bar
 #' to track progress. Set to FALSE by default.
 #'
@@ -638,6 +642,7 @@ GeoLiftPower <- function(data,
                          normalize = FALSE,
                          model = "none",
                          fixed_effects = TRUE,
+                         stat_func = NULL,
                          ProgressBar = FALSE){
 
   cl <- parallel::makeCluster(parallel::detectCores() - 1, setup_strategy = "sequential") #NEWCHANGE: Return to parallel when bug is fixed
@@ -712,7 +717,8 @@ GeoLiftPower <- function(data,
                        type = type,
                        normalize = normalize,
                        fixed_effects = fixed_effects,
-                       model = model)
+                       model = model,
+                       stat_func = stat_func)
 
                    }
 
@@ -931,6 +937,7 @@ plot.GeoLiftPower <- function(x,
 #'          }
 #' @param fixed_effects A logic flag indicating whether to include unit fixed
 #' effects in the model. Set to TRUE by default.
+#' @param stat_func Function to compute test statistic. NULL by default.
 #' @param ProgressBar A logic flag indicating whether to display a progress bar
 #' to track progress. Set to FALSE by default.
 #'
@@ -953,6 +960,7 @@ NumberLocations <- function(data,
                             normalize = FALSE,
                             model = "none",
                             fixed_effects = TRUE,
+                            stat_func = NULL,
                             ProgressBar = FALSE){
 
   cl <- parallel::makeCluster(parallel::detectCores() - 1, setup_strategy = "sequential") #NEWCHANGE: Return to parallel when bug is fixed
@@ -1025,7 +1033,8 @@ NumberLocations <- function(data,
                      type = type,
                      normalize = normalize,
                      fixed_effects = fixed_effects,
-                     model = model)
+                     model = model,
+                     stat_func = stat_func)
 
                  }
 
@@ -1169,27 +1178,37 @@ MarketSelection <- function(data,
 #'
 #' @param treatment_size Is the amount of location units within the
 #' treatment group.
-#' @param similarit_matrix Matrix that sorts each location in terms 
+#' @param similarity_matrix Matrix that sorts each location in terms
 #' of descending correlation.
+#' @param run_stochastic_process A logic flag indicating whether to select test
+#' markets through random sampling of the the similarity matrix. Given that
+#' interpolation biases may be relevant if the synthetic control matches
+#' the characteristics of the test unit by averaging away large discrepancies
+#' between the characteristics of the test and the units in the synthetic controls,
+#' it is recommended to only use random sampling after making sure all units are
+#' similar. This parameter is set by default to FALSE.
 #'
 #' @return
-#' Returns a matrix of sampled combinations of treatments.  
+#' Returns a matrix of sampled combinations of treatments.
 #' Each row represents a different treatment.
 #'
 #' @export
 stochastic_market_selector <- function(
   treatment_size,
   similarity_matrix,
-  run_stochastic_process=FALSE
+  run_stochastic_process = FALSE
 ){
   if (!run_stochastic_process){
-    message("Deterministic setup with ", treatment_size, " locations in treatment.")
+    #message("Deterministic setup with ", treatment_size, " locations in treatment.")
     return(similarity_matrix[, 1:treatment_size])
   } else {
     message("Random setup with ", treatment_size, " locations in treatment.")
     if (treatment_size > 0.5*ncol(similarity_matrix)){
-      stop(glue(
-        "Treatment size ({treatment_size}) should be <= to half the amount of units: {ncol(similarity_matrix)}"))
+      stop(paste0(
+        "Treatment size (",
+        treatment_size,
+        ") should be <= to half the amount of units: ",
+        ncol(similarity_matrix)))
     }
     sample_size <- round(ncol(similarity_matrix) / treatment_size)
     sample_matrix <- c()
@@ -1256,10 +1275,18 @@ stochastic_market_selector <- function(
 #'          }
 #' @param fixed_effects A logic flag indicating whether to include unit fixed
 #' effects in the model. Set to TRUE by default.
+#' @param stat_func Function to compute test statistic. NULL by default.
 #' @param dtw Emphasis on Dynamic Time Warping (DTW), dtw = 1 focuses exclusively
 #' on this metric while dtw = 0 (default) relies on correlations only.
 #' @param ProgressBar A logic flag indicating whether to display a progress bar
 #' to track progress. Set to FALSE by default.
+#' @param run_stochastic_process A logic flag indicating whether to select test
+#' markets through random sampling of the the similarity matrix. Given that
+#' interpolation biases may be relevant if the synthetic control matches
+#' the characteristics of the test unit by averaging away large discrepancies
+#' between the characteristics of the test and the units in the synthetic controls,
+#' it is recommended to only use random sampling after making sure all units are
+#' similar. This parameter is set by default to FALSE.
 #'
 #' @return
 #' Data frame with the ordered list of best locations and their
@@ -1280,6 +1307,7 @@ GeoLiftPower.search <- function(data,
                                 normalize = FALSE,
                                 model = "none",
                                 fixed_effects = TRUE,
+                                stat_func = NULL,
                                 dtw = 0,
                                 ProgressBar = FALSE,
                                 run_stochastic_process = FALSE){
@@ -1343,8 +1371,8 @@ GeoLiftPower.search <- function(data,
 
   for (n in N){
     BestMarkets_aux <- stochastic_market_selector(
-      n, 
-      BestMarkets, 
+      n,
+      BestMarkets,
       run_stochastic_process=run_stochastic_process)
     for (test in 1:nrow(BestMarkets_aux)){ #iterate through lift %
       for (tp in treatment_periods){ #lifts
@@ -1370,7 +1398,8 @@ GeoLiftPower.search <- function(data,
                          type = type,
                          normalize = normalize,
                          fixed_effects = fixed_effects,
-                         model = model)
+                         model = model,
+                         stat_func = stat_func)
 
                      }
 
@@ -1503,12 +1532,20 @@ GeoLiftPower.search <- function(data,
 #'          }
 #' @param fixed_effects A logic flag indicating whether to include unit fixed
 #' effects in the model. Set to TRUE by default.
+#' @param stat_func Function to compute test statistic. NULL by default.
 #' @param dtw Emphasis on Dynamic Time Warping (DTW), dtw = 1 focuses exclusively
 #' on this metric while dtw = 0 (default) relies on correlations only.
 #' @param ProgressBar A logic flag indicating whether to display a progress bar
 #' to track progress. Set to FALSE by default.
 #' @param plot_best A logic flag indicating whether to plot the best 4 tests for
 #' each treatment length. Set to FALSE by default.
+#' @param run_stochastic_process A logic flag indicating whether to select test
+#' markets through random sampling of the the similarity matrix. Given that
+#' interpolation biases may be relevant if the synthetic control matches
+#' the characteristics of the test unit by averaging away large discrepancies
+#' between the characteristics of the test and the units in the synthetic controls,
+#' it is recommended to only use random sampling after making sure all units are
+#' similar. This parameter is set by default to FALSE.
 #'
 #' @return
 #' Data frame with the ordered list of best locations and their
@@ -1528,6 +1565,7 @@ GeoLiftPowerFinder <- function(data,
                                normalize = FALSE,
                                model = "none",
                                fixed_effects = TRUE,
+                               stat_func = NULL,
                                dtw = 0,
                                ProgressBar = FALSE,
                                plot_best = FALSE,
@@ -1592,8 +1630,8 @@ GeoLiftPowerFinder <- function(data,
 
   for (n in N){
     BestMarkets_aux <- stochastic_market_selector(
-      n, 
-      BestMarkets, 
+      n,
+      BestMarkets,
       run_stochastic_process=run_stochastic_process)
     for (es in effect_size){ #iterate through lift %
       for (tp in treatment_periods){ #lifts
@@ -1617,7 +1655,8 @@ GeoLiftPowerFinder <- function(data,
                          type = "pValue",
                          normalize = normalize,
                          fixed_effects = fixed_effects,
-                         model = model)
+                         model = model,
+                         stat_func = stat_func)
 
                      }
 
